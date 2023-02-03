@@ -1,0 +1,234 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              01/28/2023 10:03:34 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          /********************************************************************
+   2          ****************** 实验名称：LED 点阵实验(显示数字)
+   3          接线说明：
+   4          实验现象：下载程序后，8*8LED 点阵显示数字 0
+   5          注意事项：LED 点阵旁的 J24 黄色跳线帽短接到 GND 一端
+   6          *********************************************************************
+   7          ******************/
+   8          #include "regx52.h"
+   9          #include <intrins.h>
+  10          #include "LCD1602.h"
+  11          
+  12          typedef unsigned int u16; // 对系统默认数据类型进行重定义
+  13          typedef unsigned char u8;
+  14          // 定义 74HC595 控制管脚
+  15          sbit SRCLK = P3 ^ 6; // 移位寄存器时钟输入
+  16          // sbit RCLK = P3 ^ 5;                                                // 存储寄存器时钟输入
+  17          sbit SER = P3 ^ 4;                                                 // 串行数据输入
+  18          #define LEDDZ_COL_PORT P0                                          // 点阵列控制端口
+  19          u8 gled_row[8] = {0x38, 0x44, 0x42, 0x21, 0x21, 0x42, 0x44, 0x38}; // LED 点阵
+  20          // 显示图像的行数据
+  21          u8 gled_col[8] = {0x7f, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0xfe}; // LED 点阵显示
+  22          // 数字 0 的列数据
+  23          /********************************************************************
+  24          ***********
+  25          * 函 数 名 : delay_10us
+  26          * 函数功能 : 延时函数，ten_us=1 时，大约延时 10us
+  27          * 输 入 : ten_us
+  28          * 输 出 : 无
+  29          *********************************************************************
+  30          **********/
+  31          void delay_10us(u16 ten_us)
+  32          {
+  33   1          while (ten_us--)
+  34   1              ;
+  35   1      }
+  36          
+  37          void Delay1ms()
+  38          {
+  39   1          unsigned char i, j;
+  40   1          _nop_();
+  41   1          i = 2;
+  42   1          j = 199;
+  43   1          do
+  44   1          {
+  45   2              while (--j)
+  46   2                  ;
+  47   2          } while (--i);
+  48   1      }
+  49          
+  50          void delay(int n)
+  51          {
+  52   1          u16 i = 0;
+  53   1          for (i = 0; i < n; i++)
+  54   1          {
+C51 COMPILER V9.60.7.0   MAIN                                                              01/28/2023 10:03:34 PAGE 2   
+
+  55   2              Delay1ms();
+  56   2          }
+  57   1      }
+  58          
+  59          /********************************************************************
+  60          ***********
+  61          * 函 数 名 : hc595_write_data(u8 dat)
+  62          * 函数功能 : 向 74HC595 写入一个字节的数据
+  63          * 输 入 : dat：数据
+  64          * 输 出 : 无
+  65          *********************************************************************
+  66          **********/
+  67          void hc595_write_data(u8 dat)
+  68          {
+  69   1          u8 i = 0;
+  70   1          for (i = 0; i < 8; i++) // 循环 8 次即可将一个字节写入寄存器中
+  71   1          {
+  72   2              SER = dat >> 7; // 优先传输一个字节中的高位
+  73   2              dat <<= 1;      // 将低位移动到高位
+  74   2              SRCLK = 0;
+  75   2              delay_10us(1);
+  76   2              SRCLK = 1;
+  77   2              delay_10us(1); // 移位寄存器时钟上升沿将端口数据送入寄存器中
+  78   2          }
+  79   1          RCLK = 0;
+  80   1          delay_10us(1);
+  81   1          RCLK = 1; // 存储寄存器时钟上升沿将前面写入到寄存器的数据输出
+  82   1      }
+  83          
+  84          void showDotMatrix();
+  85          #define SMG_A_DP_PORT P0 // 使用宏定义数码管段码口
+  86          // 定义数码管位选信号控制脚
+  87          sbit LSA = P2 ^ 2;
+  88          sbit LSB = P2 ^ 3;
+  89          sbit LSC = P2 ^ 4;
+  90          // 共阴极数码管显示 0~F 的段码数据
+  91          u8 gsmg_code[18] = {0x30, 0x38, 0x3F, 0x3E, 0x79, 0x16E, 0x3F, 0x3E};
+  92          // dpgfedcba
+  93          // 000110000 I
+  94          // 101101110
+  95          void showSmg();
+  96          /********************************************************************
+  97          ***********
+  98          * 函 数 名 : main
+  99          * 函数功能 : 主函数
+ 100          * 输 入 : 无
+ 101          * 输 出 : 无
+ 102          *********************************************************************
+ 103          **********/
+ 104          void main()
+ 105          {
+ 106   1      
+ 107   1          u8 flag, op = 0;
+ 108   1          LCD_Init();
+ 109   1          LCD_ShowChar(1, 1, 'A');
+ 110   1          while (1)
+ 111   1          {
+ 112   2              if (P3_1 == 0)
+ 113   2              {
+ 114   3                  delay(20);
+ 115   3                  while (P3_1 == 0)
+ 116   3                      ;
+C51 COMPILER V9.60.7.0   MAIN                                                              01/28/2023 10:03:34 PAGE 3   
+
+ 117   3                  delay(20);
+ 118   3                  flag += 1;
+ 119   3              }
+ 120   2              op = flag % 2;
+ 121   2              if (op == 0)
+ 122   2              {
+ 123   3                  showDotMatrix();
+ 124   3              }
+ 125   2              else
+ 126   2              {
+ 127   3                  showSmg();
+ 128   3              }
+ 129   2          }
+ 130   1      }
+ 131          
+ 132          void showDotMatrix()
+ 133          {
+ 134   1          u8 i = 0;
+ 135   1          for (i = 0; i < 8; i++) // 循环 8 次扫描 8 行、列
+ 136   1          {
+ 137   2              LEDDZ_COL_PORT = gled_col[i];  // 传送列选数据
+ 138   2              hc595_write_data(gled_row[i]); // 传送行选数据
+ 139   2              delay_10us(100);
+ 140   2              // SMG_A_DP_PORT = 0x00; // 消影
+ 141   2              hc595_write_data(0x00); // 消影
+ 142   2          }
+ 143   1      }
+ 144          
+ 145          void showSmg()
+ 146          {
+ 147   1          u8 i = 0;
+ 148   1          for (i = 0; i < 8; i++) // 循环 8 次扫描 8 行、列
+ 149   1          {
+ 150   2              // LEDDZ_COL_PORT = gled_col[i];  // 传送列选数据
+ 151   2              // hc595_write_data(gled_row[i]); // 传送行选数据
+ 152   2      
+ 153   2              switch (i) // 位选
+ 154   2              {
+ 155   3              case 0:
+ 156   3                  LSC = 1;
+ 157   3                  LSB = 1;
+ 158   3                  LSA = 1;
+ 159   3                  break;
+ 160   3              case 1:
+ 161   3                  LSC = 1;
+ 162   3                  LSB = 1;
+ 163   3                  LSA = 0;
+ 164   3                  break;
+ 165   3              case 2:
+ 166   3                  LSC = 1;
+ 167   3                  LSB = 0;
+ 168   3                  LSA = 1;
+ 169   3                  break;
+ 170   3              case 3:
+ 171   3                  LSC = 1;
+ 172   3                  LSB = 0;
+ 173   3                  LSA = 0;
+ 174   3                  break;
+ 175   3              case 4:
+ 176   3                  LSC = 0;
+ 177   3                  LSB = 1;
+ 178   3                  LSA = 1;
+C51 COMPILER V9.60.7.0   MAIN                                                              01/28/2023 10:03:34 PAGE 4   
+
+ 179   3                  break;
+ 180   3              case 5:
+ 181   3                  LSC = 0;
+ 182   3                  LSB = 1;
+ 183   3                  LSA = 0;
+ 184   3                  break;
+ 185   3              case 6:
+ 186   3                  LSC = 0;
+ 187   3                  LSB = 0;
+ 188   3                  LSA = 1;
+ 189   3                  break;
+ 190   3              case 7:
+ 191   3                  LSC = 0;
+ 192   3                  LSB = 0;
+ 193   3                  LSA = 0;
+ 194   3                  break;
+ 195   3              }
+ 196   2      
+ 197   2              SMG_A_DP_PORT = gsmg_code[i]; // 传送段选数据
+ 198   2      
+ 199   2              delay_10us(100);
+ 200   2      
+ 201   2              SMG_A_DP_PORT = 0x00; // 消影
+ 202   2              // hc595_write_data(0x00); // 消影
+ 203   2          }
+ 204   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    290    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     34       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
